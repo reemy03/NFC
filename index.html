@@ -1,0 +1,459 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>夏祭り 2023 - タイムカプセル</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Serif+JP:wght@400;700;900&display=swap');
+
+        @keyframes float-appear {
+            0% { opacity: 0; transform: translateY(50px) scale(0.9); }
+            100% { opacity: 1; transform: translateY(0) scale(1); }
+        }
+        @keyframes float-bob {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-15px); }
+        }
+        @keyframes loading-bar {
+            0% { width: 0%; opacity: 0.5; }
+            50% { width: 100%; opacity: 1; }
+            100% { width: 0%; opacity: 0.5; margin-left: 100%; }
+        }
+        @keyframes fade-in {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+        @keyframes zoom-in {
+            from { opacity: 0; transform: scale(0.95); }
+            to { opacity: 1; transform: scale(1); }
+        }
+        @keyframes spin-slow {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+        
+        /* カード出現アニメーション (下からスッと出てくる) */
+        @keyframes card-enter-bottom {
+            0% { transform: translateY(120vh) rotate(-5deg) scale(0.9); opacity: 0; }
+            60% { transform: translateY(-20px) rotate(1deg) scale(1.05); opacity: 1; }
+            80% { transform: translateY(5px) rotate(0deg) scale(1); opacity: 1; }
+            100% { transform: translateY(0) rotate(0deg) scale(1); opacity: 1; }
+        }
+
+        /* スキャン光のアニメーション */
+        @keyframes scan-light-sweep {
+            0% { left: -50%; opacity: 0; }
+            10% { opacity: 1; }
+            90% { opacity: 1; }
+            100% { left: 150%; opacity: 0; }
+        }
+
+        .animate-float-appear { animation: float-appear 1.5s ease-out forwards; }
+        .animate-float-bob { animation: float-bob 4s ease-in-out infinite; }
+        .animate-loading-bar { animation: loading-bar 1.5s ease-in-out infinite; }
+        .animate-fade-in { animation: fade-in 1.5s ease-out; }
+        .animate-zoom-in { animation: zoom-in 0.4s cubic-bezier(0.16, 1, 0.3, 1); }
+        .animate-spin-slow { animation: spin-slow 8s linear infinite; }
+        
+        /* カードアニメーション適用クラス */
+        .animate-card-enter { animation: card-enter-bottom 1.2s cubic-bezier(0.22, 1, 0.36, 1) forwards; }
+        /* 横向きスキャン光（左から右へ） */
+        .animate-scan-light-horizontal { animation: scan-light-sweep 2.5s ease-in-out forwards; }
+        
+        /* スクロールバー非表示 */
+        .scrollbar-hide::-webkit-scrollbar { display: none; }
+        .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+        
+        /* 画面遷移用 */
+        .view-hidden { display: none !important; }
+        
+        .font-serif-jp { font-family: 'Noto Serif JP', serif; }
+    </style>
+</head>
+<body class="bg-sky-200 font-sans text-slate-800 overflow-hidden h-screen w-full relative selection:bg-blue-500/30">
+
+    <!-- 背景のアニメーション -->
+    <div class="absolute inset-0 z-0 bg-gradient-to-b from-sky-200 via-sky-100 to-white pointer-events-none">
+        <div class="absolute top-10 left-[-10%] w-96 h-96 bg-white/40 rounded-full blur-[80px] animate-pulse"></div>
+        <div class="absolute bottom-10 right-[-10%] w-[30rem] h-[30rem] bg-blue-200/30 rounded-full blur-[100px] animate-pulse" style="animation-delay: 3s"></div>
+        <div class="absolute inset-0 opacity-60" style="background-image: url('https://www.transparenttextures.com/patterns/snow.png');"></div>
+    </div>
+
+    <!-- アプリケーションコンテナ -->
+    <div id="app" class="relative z-10 h-full w-full">
+        
+        <!-- 1. 開封中画面 (Scanning) - 初期表示 -->
+        <div id="view-scanning" class="flex flex-col items-center justify-center h-full w-full h-full absolute inset-0 z-50">
+            
+            <!-- カード出現演出コンテナ -->
+            <div id="card-reveal-container" class="relative flex flex-col items-center justify-center w-full px-4 perspective-[1000px]">
+                
+                <!-- カード本体 (ご指定のデザイン) -->
+                <div class="relative w-full max-w-[400px] h-60 bg-white rounded-xl shadow-2xl animate-card-enter transform-gpu overflow-hidden flex ring-1 ring-black/5">
+                    
+                    <!-- 左側：写真エリア (55%) -->
+                    <div class="w-[55%] h-full relative overflow-hidden bg-slate-200">
+                        <img id="scanned-card-img" src="" class="w-full h-full object-cover transition-transform duration-[8s] ease-linear scale-110">
+                        <!-- 写真上の薄いグラデーション -->
+                        <div class="absolute inset-0 bg-gradient-to-r from-transparent to-black/10 mix-blend-multiply"></div>
+                    </div>
+
+                    <!-- 右側：情報エリア (45%) -->
+                    <div class="w-[45%] h-full bg-[#fdfbf7] p-5 flex flex-col justify-center relative">
+                        <!-- 背景の透かし模様 -->
+                        <div class="absolute top-[-20px] right-[-20px] opacity-[0.03] pointer-events-none">
+                            <i data-lucide="sun" class="w-32 h-32 text-orange-500"></i>
+                        </div>
+
+                        <!-- コンテンツ -->
+                        <div class="relative z-10 flex flex-col h-full justify-center">
+                            
+                            <!-- 日付 -->
+                            <div class="mb-3">
+                                <p class="text-[10px] font-mono text-slate-400 tracking-[0.2em] uppercase mb-1">Date</p>
+                                <p class="text-sm font-bold text-slate-600 font-serif-jp border-b border-slate-200 pb-1 inline-block">2023.08.15</p>
+                            </div>
+
+                            <!-- タイトル -->
+                            <div class="mb-4">
+                                <h2 class="text-3xl font-black text-slate-800 font-serif-jp tracking-tight leading-none drop-shadow-sm">
+                                    夏祭り
+                                </h2>
+                            </div>
+
+                            <!-- 下部の装飾 -->
+                            <div class="mt-auto flex items-end justify-between">
+                                <div class="flex flex-col">
+                                    <span class="text-[8px] text-slate-400 tracking-widest uppercase">Memory<br>Archive</span>
+                                </div>
+                                <!-- NFC Icon -->
+                                <div class="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center border border-slate-200">
+                                    <i data-lucide="nfc" class="w-4 h-4 text-slate-400"></i>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- スキャン光エフェクト -->
+                    <div class="absolute top-0 w-20 h-full bg-gradient-to-r from-transparent via-white/60 to-transparent skew-x-[-20deg] animate-scan-light-horizontal pointer-events-none mix-blend-soft-light" style="left: -50%;"></div>
+                    <div class="absolute top-0 w-[1px] h-full bg-sky-300 shadow-[0_0_15px_rgba(14,165,233,0.6)] animate-scan-light-horizontal pointer-events-none" style="left: -50%;"></div>
+                </div>
+
+                <!-- ステータステキスト -->
+                <div class="mt-10 text-center animate-fade-in" style="animation-delay: 0.8s">
+                    <div class="inline-flex items-center gap-3 px-5 py-2.5 bg-white/60 backdrop-blur-md rounded-full shadow-sm ring-1 ring-white/60">
+                        <div class="relative flex h-2.5 w-2.5">
+                          <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-sky-400 opacity-75"></span>
+                          <span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-sky-500"></span>
+                        </div>
+                        <span class="text-xs font-medium text-slate-600 tracking-wider">読み込み中...</span>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+
+        <!-- 3. 思い出再生画面 (Unlocked) -->
+        <div id="view-unlocked" class="view-hidden h-full w-full absolute inset-0 transition-all duration-700">
+            
+            <!-- ヘッダー -->
+            <div class="absolute top-0 w-full p-6 pt-8 flex justify-between items-center z-20 bg-gradient-to-b from-white/80 via-white/50 to-transparent backdrop-blur-[2px]">
+                <div>
+                    <h2 class="text-lg font-serif-jp font-bold tracking-wide text-slate-700">夏の思い出</h2>
+                    <div class="flex items-center gap-2 mt-1">
+                        <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                        <p class="text-[10px] text-slate-500 tracking-widest uppercase"><span id="memory-count">5</span>枚の写真</p>
+                    </div>
+                </div>
+                
+                <div class="flex gap-2">
+                    <button onclick="toggleViewMode()" id="btn-toggle-view" class="p-3 bg-white/40 border border-white/60 rounded-full hover:bg-white/80 transition-all active:scale-95 shadow-sm" title="一覧表示へ">
+                        <i id="icon-view-mode" data-lucide="layout-grid" class="w-[18px] h-[18px] text-slate-600"></i>
+                    </button>
+
+                    <button onclick="resetApp()" class="p-3 bg-white/40 border border-white/60 rounded-full hover:bg-white/80 transition-all active:scale-95 group shadow-sm" title="もう一度見る">
+                        <i data-lucide="refresh-cw" class="w-[18px] h-[18px] text-slate-600 group-hover:rotate-180 transition-transform duration-500"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- コンテンツエリア：浮遊モード -->
+            <div id="container-floating" class="absolute inset-0 overflow-hidden pointer-events-none w-full h-full"></div>
+
+            <!-- コンテンツエリア：グリッドモード -->
+            <div id="container-grid" class="view-hidden absolute inset-0 z-10 pt-32 px-4 overflow-y-auto pb-32 animate-fade-in scrollbar-hide">
+                <div id="grid-content" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 max-w-4xl mx-auto"></div>
+            </div>
+
+            <div id="floating-instruction" class="absolute bottom-12 w-full text-center z-20 pointer-events-none">
+                <p class="text-slate-500/60 text-xs font-medium tracking-[0.2em] animate-pulse font-serif-jp">
+                    写真を選んでください
+                </p>
+            </div>
+        </div>
+
+        <!-- 4. 詳細モーダル (Detail Modal) -->
+        <div id="modal-detail" class="view-hidden absolute inset-0 z-50 flex items-center justify-center p-4 animate-zoom-in">
+            <div class="absolute inset-0 bg-sky-900/20 backdrop-blur-sm" onclick="closeDetail()"></div>
+            <div class="relative bg-white w-full max-w-sm md:max-w-md rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[85vh] ring-1 ring-white/40">
+                <div class="relative flex-grow bg-slate-50 flex items-center justify-center overflow-hidden h-[50vh]">
+                    <img id="detail-img" src="" alt="detail" class="w-full h-full object-cover">
+                    <button onclick="closeDetail()" class="absolute top-4 right-4 bg-white/30 text-white p-2 rounded-full hover:bg-white/50 backdrop-blur-md transition hover:rotate-90 duration-300 shadow-sm">
+                        <i data-lucide="x" class="w-5 h-5"></i>
+                    </button>
+                </div>
+                <div class="p-6 bg-white text-slate-800 relative">
+                    <div class="flex flex-col mb-4">
+                        <span id="detail-date" class="text-xs font-mono text-slate-400 tracking-widest mb-1"></span>
+                        <h3 id="detail-location" class="text-xl font-serif-jp font-bold text-slate-800 leading-tight"></h3>
+                    </div>
+                    <div class="relative pl-4 border-l-2 border-sky-200 mb-8">
+                        <p id="detail-message" class="text-slate-600 text-sm italic leading-relaxed font-serif-jp"></p>
+                    </div>
+                    <div class="grid grid-cols-2 gap-3 mt-auto">
+                        <button class="flex flex-col items-center justify-center gap-1 bg-slate-50 hover:bg-slate-100 text-slate-600 py-3 rounded-xl transition border border-slate-100 group">
+                            <i data-lucide="share-2" class="w-[18px] h-[18px] group-hover:scale-110 transition-transform text-sky-500"></i>
+                            <span class="text-[10px] font-bold uppercase tracking-wider">共有</span>
+                        </button>
+                        <button class="flex flex-col items-center justify-center gap-1 bg-sky-500 hover:bg-sky-600 text-white py-3 rounded-xl shadow-lg shadow-sky-200 transition group relative overflow-hidden">
+                            <div class="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300"></div>
+                            <i data-lucide="printer" class="w-[18px] h-[18px] relative z-10 group-hover:rotate-12 transition-transform"></i>
+                            <span class="relative z-10 text-[10px] font-bold uppercase tracking-wider">NFC書き出し</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        // --- データ (Unsplashの画像を使用) ---
+        const memories = [
+            {
+                id: 1,
+                // 変更: 夜空いっぱいの大輪の花火
+                url: "https://images.unsplash.com/photo-1498931299472-f7a63a5a1cfa?q=80&w=2073&auto=format&fit=crop", 
+                date: "2023.08.15",
+                location: "河川敷",
+                message: "サークルの皆で見た花火、一生の思い出。",
+                rotation: -3,
+                top: "15%",
+                left: "10%",
+                delay: "0s"
+            },
+            {
+                id: 2,
+                // 線香花火
+                url: "https://images.unsplash.com/photo-1567332815042-4f38d3879a95?q=80&w=2070&auto=format&fit=crop",
+                date: "2023.08.15",
+                location: "公園の片隅",
+                message: "線香花火、誰が一番長く続くか勝負したね。",
+                rotation: 2,
+                top: "25%",
+                left: "55%",
+                delay: "0.5s"
+            },
+            {
+                id: 3,
+                // 打ち上げ花火（別アングル）
+                url: "https://images.unsplash.com/photo-1498931299472-f7a63a5a1cfa?q=80&w=2073&auto=format&fit=crop",
+                date: "2023.08.15",
+                location: "特等席",
+                message: "フィナーレの迫力、すごかった。",
+                rotation: -2,
+                top: "50%",
+                left: "5%",
+                delay: "1.0s"
+            },
+            {
+                id: 4,
+                // 屋台の提灯
+                url: "https://images.unsplash.com/photo-1533236897111-3e94666b2edf?q=80&w=2070&auto=format&fit=crop",
+                date: "2023.08.15",
+                location: "屋台通り",
+                message: "じゃんけんで負けた人が買い出し係！",
+                rotation: 4,
+                top: "55%",
+                left: "65%",
+                delay: "1.5s"
+            },
+            {
+                id: 5,
+                // 浴衣姿と風車
+                url: "https://images.unsplash.com/photo-1493976040374-85c8e12f0c0e?q=80&w=2070&auto=format&fit=crop",
+                date: "2023.08.15",
+                location: "帰り道",
+                message: "また来年も、絶対にこのメンバーで行こう。",
+                rotation: -1,
+                top: "75%",
+                left: "30%",
+                delay: "2.0s"
+            }
+        ];
+
+        // --- 状態管理 ---
+        let appState = 'scanning'; // 初期状態をスキャン中に設定
+        let viewMode = 'floating'; 
+        let selectedMemory = null;
+
+        const views = {
+            scanning: document.getElementById('view-scanning'),
+            unlocked: document.getElementById('view-unlocked')
+        };
+        const modalDetail = document.getElementById('modal-detail');
+        const containerFloating = document.getElementById('container-floating');
+        const containerGrid = document.getElementById('container-grid');
+        const gridContent = document.getElementById('grid-content');
+        const floatingInstruction = document.getElementById('floating-instruction');
+        const btnToggleView = document.getElementById('btn-toggle-view');
+        const iconViewMode = document.getElementById('icon-view-mode');
+        const unlockedContainer = document.getElementById('view-unlocked');
+        const scannedCardImg = document.getElementById('scanned-card-img');
+
+        // --- 初期化 ---
+        document.getElementById('memory-count').textContent = memories.length;
+        renderMemories();
+        lucide.createIcons();
+        
+        // アプリ開始（即座にカード出現演出へ）
+        startScanningSequence();
+
+        // --- 関数 ---
+
+        // スキャンシーケンス（カード出現演出）
+        function startScanningSequence() {
+            updateState('scanning');
+            
+            // スキャンされる画像（カードの左側写真）をセット
+            if (scannedCardImg && memories.length > 0) {
+                scannedCardImg.src = memories[0].url;
+            }
+
+            // スキャン完了まで待機
+            setTimeout(() => {
+                updateState('unlocked');
+            }, 3500);
+        }
+
+        // アプリの状態更新
+        function updateState(newState) {
+            appState = newState;
+            
+            // 全ビューを非表示
+            Object.values(views).forEach(el => {
+                if(el) el.classList.add('view-hidden');
+            });
+            if(modalDetail) modalDetail.classList.add('view-hidden');
+            
+            if (newState === 'scanning') {
+                if(views.scanning) views.scanning.classList.remove('view-hidden');
+            } else if (newState === 'unlocked' || newState === 'detail') {
+                if(views.unlocked) views.unlocked.classList.remove('view-hidden');
+                
+                if (newState === 'detail') {
+                    unlockedContainer.classList.add('blur-md', 'scale-95', 'opacity-60');
+                    modalDetail.classList.remove('view-hidden');
+                } else {
+                    unlockedContainer.classList.remove('blur-md', 'scale-95', 'opacity-60');
+                }
+            }
+            lucide.createIcons();
+        }
+
+        // 写真タップ時
+        function handleMemoryClick(id) {
+            const memory = memories.find(m => m.id === id);
+            if (memory) {
+                selectedMemory = memory;
+                document.getElementById('detail-img').src = memory.url;
+                document.getElementById('detail-date').textContent = memory.date;
+                document.getElementById('detail-location').textContent = memory.location;
+                document.getElementById('detail-message').textContent = `"${memory.message}"`;
+                updateState('detail');
+            }
+        }
+
+        function closeDetail() {
+            selectedMemory = null;
+            updateState('unlocked');
+        }
+
+        function resetApp() {
+            selectedMemory = null;
+            setViewMode('floating');
+            // 最初から再生
+            startScanningSequence();
+        }
+
+        function toggleViewMode() {
+            setViewMode(viewMode === 'floating' ? 'grid' : 'floating');
+        }
+
+        function setViewMode(mode) {
+            viewMode = mode;
+            if (mode === 'floating') {
+                containerFloating.classList.remove('view-hidden');
+                containerGrid.classList.add('view-hidden');
+                floatingInstruction.classList.remove('view-hidden');
+                iconViewMode.setAttribute('data-lucide', 'layout-grid');
+                btnToggleView.title = "一覧表示へ";
+            } else {
+                containerFloating.classList.add('view-hidden');
+                containerGrid.classList.remove('view-hidden');
+                floatingInstruction.classList.add('view-hidden');
+                iconViewMode.setAttribute('data-lucide', 'wind');
+                btnToggleView.title = "浮遊表示へ";
+            }
+            lucide.createIcons();
+        }
+
+        function renderMemories() {
+            const floatingHTML = memories.map(memory => `
+                <div 
+                    class="absolute w-40 md:w-56 cursor-pointer pointer-events-auto animate-float-appear"
+                    style="top: ${memory.top}; left: ${memory.left}; animation-delay: ${memory.delay}; transform: rotate(${memory.rotation}deg);"
+                    onclick="handleMemoryClick(${memory.id})"
+                >
+                    <div class="animate-float-bob">
+                        <div class="bg-white p-2 pb-8 shadow-lg transition-all duration-500 hover:scale-110 hover:shadow-2xl hover:z-50 hover:rotate-0" style="transform: rotate(${memory.rotation}deg)">
+                            <div class="relative aspect-[3/4] overflow-hidden bg-gray-100">
+                                <img src="${memory.url}" alt="memory" class="w-full h-full object-cover filter brightness-105" onerror="this.onerror=null; this.src='https://via.placeholder.com/300x400?text=Image+Not+Found';">
+                                <div class="absolute inset-0 bg-gradient-to-tr from-white/40 via-transparent to-transparent opacity-50 pointer-events-none"></div>
+                            </div>
+                            <div class="absolute bottom-2 left-0 w-full text-center px-1">
+                                <p class="text-gray-400 font-serif-jp text-[10px] uppercase tracking-widest truncate">${memory.date}</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+            containerFloating.innerHTML = floatingHTML;
+
+            const gridHTML = memories.map((memory, index) => `
+                <div 
+                    onclick="handleMemoryClick(${memory.id})"
+                    class="group relative aspect-square bg-white p-2 shadow-sm rounded-xl cursor-pointer hover:shadow-md transition-all duration-300"
+                    style="animation: fade-in 0.5s ease-out forwards; animation-delay: ${index * 0.1}s; opacity: 0;"
+                >
+                    <div class="w-full h-full overflow-hidden rounded-lg bg-gray-100 relative">
+                        <img src="${memory.url}" alt="thumbnail" class="w-full h-full object-cover transform group-hover:scale-110 transition-transform duration-500" onerror="this.onerror=null; this.src='https://via.placeholder.com/150?text=Not+Found';">
+                        <div class="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center">
+                            <div class="bg-white/20 backdrop-blur-md p-2 rounded-full">
+                                <i data-lucide="sparkles" class="w-4 h-4 text-white"></i>
+                            </div>
+                        </div>
+                        <div class="absolute bottom-0 left-0 w-full p-2 bg-gradient-to-t from-black/60 to-transparent">
+                            <p class="text-white text-[10px] font-medium truncate tracking-wide font-serif-jp">${memory.location}</p>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+            gridContent.innerHTML = gridHTML;
+        }
+    </script>
+</body>
+</html>
